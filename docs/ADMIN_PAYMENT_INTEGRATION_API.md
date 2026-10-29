@@ -11,7 +11,7 @@
 - 支付成功后充值
 - 用户查询
 - 人工余额修正
-- 前端购买页参数透传
+- 前端自定义页面参数透传
 
 ### 基础地址
 - 生产：`https://<your-domain>`
@@ -99,18 +99,22 @@ curl -X POST "${BASE}/api/v1/admin/users/123/balance" \
   }'
 ```
 
-### 4) 购买页 / 自定义页面 URL Query 透传（iframe / 新窗口一致）
-当 Sub2API 打开 `purchase_subscription_url` 或用户侧自定义页面 iframe URL 时，会统一追加：
+### 4) 自定义页面 URL Query 透传（iframe / 新窗口一致）
+当 Sub2API 打开用户侧自定义页面 iframe URL 时，会统一追加：
 - `user_id`
-- `token`
 - `theme`（`light` / `dark`）
 - `lang`（例如 `zh` / `en`，用于向嵌入页传递当前界面语言）
 - `ui_mode`（固定 `embedded`）
+- `src_host` / `src_url`（发起嵌入的页面地址，供嵌入页校验来源）
 
 示例：
 ```text
-https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=embedded
+https://page.example.com/page?user_id=123&theme=light&lang=zh&ui_mode=embedded
 ```
+
+**不再透传 `token`**：登录 JWT 属于免密凭证，放进 URL 会经浏览器历史、`Referer` 与反向代理访问日志外泄，
+因此 Sub2API 不再把 token 拼进任何 iframe URL。嵌入页需要确认用户身份时，请基于 `user_id` + `src_host`
+校验来源并自行完成鉴权（例如要求用户在该页单独登录）。
 
 ### 5) 失败处理建议
 - 支付成功与充值成功分状态落库
@@ -131,7 +135,7 @@ This document describes the minimal Sub2API Admin API surface for external payme
 - Recharge after payment success
 - User lookup
 - Manual balance correction
-- Purchase page query parameter forwarding
+- Custom page query parameter forwarding
 
 ### Base URL
 - Production: `https://<your-domain>`
@@ -219,18 +223,24 @@ curl -X POST "${BASE}/api/v1/admin/users/123/balance" \
   }'
 ```
 
-### 4) Purchase / Custom Page URL query forwarding (iframe and new tab)
-When Sub2API opens `purchase_subscription_url` or a user-facing custom page iframe URL, it appends:
+### 4) Custom Page URL query forwarding (iframe and new tab)
+When Sub2API opens a user-facing custom page iframe URL, it appends:
 - `user_id`
-- `token`
 - `theme` (`light` / `dark`)
 - `lang` (for example `zh` / `en`, used to pass the current UI language to the embedded page)
 - `ui_mode` (fixed: `embedded`)
+- `src_host` / `src_url` (origin and full URL of the embedding page, so the embedded page can validate the source)
 
 Example:
 ```text
-https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=embedded
+https://page.example.com/page?user_id=123&theme=light&lang=zh&ui_mode=embedded
 ```
+
+**`token` is no longer forwarded.** A login JWT is a bearer credential; putting it in a URL leaks it
+through browser history, the `Referer` header and reverse-proxy access logs, so Sub2API no longer
+appends it to any iframe URL. Embedded pages that need to identify the user should validate the
+`src_host` source together with `user_id` and run their own authentication (for example, ask the user
+to sign in on that page).
 
 ### 5) Failure handling recommendations
 - Persist payment success and recharge success as separate states
