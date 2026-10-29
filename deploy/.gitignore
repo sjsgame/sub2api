@@ -17,3 +17,20 @@ redis_data/
 # Temporary files
 *.tmp
 *.log
+
+# ---------------------------------------------------------------------------
+# 个人部署 / 联调笔记（本机绝对路径、内网地址、真实域名、第三方服务密钥策略）。
+# 本仓库是 public fork，这些文件只留本地：默认忽略，确需公开时用 git add -f。
+# ---------------------------------------------------------------------------
+/ANTIGRAVITY_GEMINI_FLASH.md
+/CHANGELOG.md
+/INVITATION_AND_BILLING.md
+/MAC_LOCAL.md
+/OPENAI_GPT_PLUS_SUB2API.md
+/PUBLIC_ENTRY.md
+/WORKBUDDY_INTEGRATION.md
+/WORKBUDDY_KEY_POLICY.md
+/WORKBUDDY_PRICING.md
+/docker-compose.mac-local.yml
+/mac-local-control.py
+/mac-local-security.yaml
