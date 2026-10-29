@@ -2604,7 +2604,6 @@ func supportsOpenAIReasoningEffortMax(model string) bool {
 // validateGPT61SolCompatRequest runs after model mapping, before conversion can
 // discard unsupported explicit effort selections or disabled thinking. It covers
 // the whole GPT-6.1 family (Sol / Terra); the name is historical.
-// discard unsupported explicit effort selections or disabled thinking.
 func validateGPT61SolCompatRequest(body []byte, model string) error {
 	if !openai.IsGPT61ModelSpelling(model) {
 		return nil

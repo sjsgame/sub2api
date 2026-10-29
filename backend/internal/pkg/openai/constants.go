@@ -234,8 +234,14 @@ func IsGPT61TerraModelSpelling(model string) bool {
 	}
 }
 
-func RequiresResponsesForToolCalls(model string) bool {
+// IsGPT61ModelSpelling reports whether the model belongs to the GPT-6.1 family
+// (Sol or Terra). Both share the same reasoning ladder and billing rules.
+func IsGPT61ModelSpelling(model string) bool {
 	return IsGPT61SolModelSpelling(model) || IsGPT61TerraModelSpelling(model)
+}
+
+func RequiresResponsesForToolCalls(model string) bool {
+	return IsGPT61ModelSpelling(model)
 }
 
 // ValidateGPT61SolReasoningEffort rejects disabled reasoning instead of silently
