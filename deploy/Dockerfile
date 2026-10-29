@@ -7,7 +7,7 @@
 # =============================================================================
 
 ARG NODE_IMAGE=node:24-alpine
-ARG GOLANG_IMAGE=golang:1.27.2-alpine
+ARG GOLANG_IMAGE=golang:1.27.3-alpine
 ARG ALPINE_IMAGE=alpine:3.20
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
@@ -18,7 +18,9 @@ ARG GOSUMDB=sum.golang.google.cn
 FROM ${NODE_IMAGE} AS frontend-builder
 
 WORKDIR /app/frontend
-ENV NODE_OPTIONS=--max-old-space-size=1536
+# vue-tsc + vite build 在 1536MB 堆下会 OOM（Infective mark-compacts），默认给 4096MB。
+ARG NODE_BUILD_HEAP_MB=4096
+ENV NODE_OPTIONS=--max-old-space-size=${NODE_BUILD_HEAP_MB}
 
 # Install pnpm. Keep this pinned to the lockfile-compatible major version so
 # Docker builds remain reproducible when pnpm changes config validation rules.

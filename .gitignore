@@ -162,3 +162,7 @@ issues/
 .vite/
 # 本地闭源插件开发目录及构建产物不进入 Sub2API 仓库
 /plugins/
+
+# Mac-local deployment outputs and private backups
+deploy/backups/
+deploy/__pycache__/
