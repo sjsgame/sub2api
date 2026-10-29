@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -28,10 +29,14 @@ import (
 //     after a backoff can plausibly succeed (or, in the empty-pool case, the
 //     operator may be in the middle of adding accounts).
 type noAccountErrorClassification struct {
-	Status        int
-	ErrType       string
-	Message       string
-	ModelNotFound bool // true when this is a 404 model_not_found classification
+	Status  int
+	ErrType string
+	Message string
+	// RetryAfterSeconds, when positive, is published as the Retry-After header
+	// so rate-limit aware clients wait for the upstream quota window to reopen
+	// instead of retrying a generic failure immediately.
+	RetryAfterSeconds int
+	ModelNotFound     bool // true when this is a 404 model_not_found classification
 }
 
 var selectionModelRateLimitedPattern = regexp.MustCompile(`(?:model_rate_limited|rate_limited)=(\d+)`)
@@ -134,6 +139,9 @@ func classifyNoAccountError(
 			ModelNotFound: true,
 		}
 	}
+	if result.HasModelSupport && result.AllModelAccountsRateLimited {
+		return rateLimitedNoAccountClassification(displayModel, result.NextRateLimitResetAt)
+	}
 	return fallback
 }
 
@@ -189,4 +197,42 @@ func openAICompatibleSelectionErrorForLog(err error, platform string) error {
 		return err
 	}
 	return fmt.Errorf("%s", message)
+}
+
+// rateLimitedNoAccountClassification answers 429 with a message that names the
+// exhausted upstream quota and, when known, when that window reopens. The
+// previous 503 "Service temporarily unavailable" told the end user nothing and
+// made clients retry immediately instead of waiting for the reset.
+func rateLimitedNoAccountClassification(displayModel string, resetAt time.Time) noAccountErrorClassification {
+	target := "the requested model"
+	if model := strings.TrimSpace(displayModel); model != "" {
+		target = fmt.Sprintf("model %q", model)
+	}
+	if resetAt.IsZero() {
+		return noAccountErrorClassification{
+			Status:  http.StatusTooManyRequests,
+			ErrType: "rate_limit_error",
+			Message: fmt.Sprintf("Usage limit reached: every upstream account serving %s is temporarily rate-limited. Please retry later.", target),
+		}
+	}
+	seconds := int(time.Until(resetAt).Seconds())
+	if seconds < 1 {
+		seconds = 1
+	}
+	return noAccountErrorClassification{
+		Status:            http.StatusTooManyRequests,
+		ErrType:           "rate_limit_error",
+		Message:           fmt.Sprintf("Usage limit reached: every upstream account serving %s has used up its current quota window. It resets at %s (in about %d min), so retrying before then cannot succeed.", target, resetAt.Local().Format("2006-01-02 15:04 MST"), (seconds+59)/60),
+		RetryAfterSeconds: seconds,
+	}
+}
+
+// applyNoAccountRetryAfter publishes Retry-After for classifications that know
+// when the quota window reopens. Skipped once a stream has started, because the
+// response headers are already on the wire.
+func applyNoAccountRetryAfter(c *gin.Context, cls noAccountErrorClassification, streamStarted bool) {
+	if c == nil || cls.RetryAfterSeconds <= 0 || streamStarted {
+		return
+	}
+	c.Header("Retry-After", strconv.Itoa(cls.RetryAfterSeconds))
 }

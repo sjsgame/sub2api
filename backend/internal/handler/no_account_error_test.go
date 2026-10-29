@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -321,4 +322,56 @@ func TestClassifyNoAccountError_GPT55Retirement(t *testing.T) {
 func TestGPT55RetirementEmptyListingDoesNotUseDefaults(t *testing.T) {
 	require.Empty(t, modelListingSource(service.PlatformOpenAI, []string{}, []string{"gpt-5.5"}))
 	require.Equal(t, []string{"gpt-5.5"}, modelListingSource(service.PlatformOpenAI, nil, []string{"gpt-5.5"}))
+}
+
+// When every account serving the model is inside a rate-limit window the
+// classifier must answer 429 with a reset time, so clients stop blind retries
+// and the end user learns the subscription quota is exhausted.
+func TestClassifyNoAccountError_AllAccountsRateLimited_Returns429(t *testing.T) {
+	c := newTestGinContextWithRequest()
+	apiKey := &service.APIKey{GroupID: ptrInt64(7)}
+	resetAt := time.Now().Add(20 * time.Minute)
+	fd := &fakeDiagnoser{resp: service.ModelAvailabilityDiagnosis{
+		HasAccountsInPool:           true,
+		HasModelSupport:             true,
+		AllModelAccountsRateLimited: true,
+		NextRateLimitResetAt:        resetAt,
+	}}
+
+	cls := classifyNoAccountErrorFromGin(c, fd, apiKey, "gpt-6.1-terra", "gpt-6.1-terra", service.PlatformOpenAI)
+
+	require.Equal(t, http.StatusTooManyRequests, cls.Status)
+	require.Equal(t, "rate_limit_error", cls.ErrType)
+	require.False(t, cls.ModelNotFound)
+	require.InDelta(t, (20 * time.Minute).Seconds(), float64(cls.RetryAfterSeconds), 5)
+	require.Contains(t, cls.Message, "gpt-6.1-terra")
+	require.Contains(t, cls.Message, "resets at")
+}
+
+// Without a recorded reset time the classifier still answers 429, just without
+// inventing a deadline.
+func TestClassifyNoAccountError_RateLimitedWithoutResetTime(t *testing.T) {
+	c := newTestGinContextWithRequest()
+	apiKey := &service.APIKey{GroupID: ptrInt64(7)}
+	fd := &fakeDiagnoser{resp: service.ModelAvailabilityDiagnosis{
+		HasAccountsInPool:           true,
+		HasModelSupport:             true,
+		AllModelAccountsRateLimited: true,
+	}}
+
+	cls := classifyNoAccountErrorFromGin(c, fd, apiKey, "gpt-6.1-terra", "gpt-6.1-terra", service.PlatformOpenAI)
+
+	require.Equal(t, http.StatusTooManyRequests, cls.Status)
+	require.Zero(t, cls.RetryAfterSeconds)
+	require.Contains(t, cls.Message, "rate-limited")
+}
+
+func TestApplyNoAccountRetryAfter_PublishesHeaderOnlyBeforeStreaming(t *testing.T) {
+	c := newTestGinContextWithRequest()
+	applyNoAccountRetryAfter(c, noAccountErrorClassification{RetryAfterSeconds: 90}, false)
+	require.Equal(t, "90", c.Writer.Header().Get("Retry-After"))
+
+	streaming := newTestGinContextWithRequest()
+	applyNoAccountRetryAfter(streaming, noAccountErrorClassification{RetryAfterSeconds: 90}, true)
+	require.Empty(t, streaming.Writer.Header().Get("Retry-After"))
 }

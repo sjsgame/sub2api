@@ -699,9 +699,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.Error(err),
 					)
 					message := cls.Message
-					if !cls.ModelNotFound {
+					if !cls.ModelNotFound && cls.Status != http.StatusTooManyRequests {
 						message = "No available accounts: " + err.Error()
 					}
+					applyNoAccountRetryAfter(c, cls, streamStarted)
 					h.handleStreamingAwareError(c, cls.Status, cls.ErrType, message, streamStarted)
 					return
 				}

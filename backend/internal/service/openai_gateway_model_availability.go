@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 )
@@ -54,6 +55,10 @@ func (s *OpenAIGatewayService) DiagnoseModelAvailabilityForPlatform(
 	}
 
 	diag := ModelAvailabilityDiagnosis{}
+	now := time.Now()
+	supporting := 0
+	rateLimited := 0
+	var earliestReset time.Time
 	for i := range accounts {
 		diag.HasAccountsInPool = true
 		if isRetiredOpenAISubscriptionModel(&accounts[i], resolveOpenAIAccountUpstreamModelForRequest(&accounts[i], requestedModel, false)) {
@@ -63,10 +68,26 @@ func (s *OpenAIGatewayService) DiagnoseModelAvailabilityForPlatform(
 		// (openai_account_scheduler.isAccountRequestCompatible): empty
 		// model_mapping accepts everything; otherwise the explicit / wildcard
 		// mapping must match.
-		if accounts[i].IsModelSupported(requestedModel) {
-			diag.HasModelSupport = true
-			return diag
+		if !accounts[i].IsModelSupported(requestedModel) {
+			continue
 		}
+		diag.HasModelSupport = true
+		supporting++
+		reset := accounts[i].RateLimitResetAt
+		if reset == nil || !now.Before(*reset) {
+			continue
+		}
+		rateLimited++
+		if earliestReset.IsZero() || reset.Before(earliestReset) {
+			earliestReset = *reset
+		}
+	}
+	// Claim "every account serving this model is rate-limited" only when the
+	// whole supporting set sits inside a recorded window: that is the case where
+	// retrying now cannot succeed and the client should be told to wait.
+	if supporting > 0 && rateLimited == supporting {
+		diag.AllModelAccountsRateLimited = true
+		diag.NextRateLimitResetAt = earliestReset
 	}
 	return diag
 }

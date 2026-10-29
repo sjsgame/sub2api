@@ -3,14 +3,16 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 )
 
 // ModelAvailabilityDiagnosis describes whether the requested model can be
 // served by any persistently eligible account in the group (active with its
-// schedulable setting enabled), ignoring transient state such as rate limits,
-// overload, temporary unschedulability, and runtime blocks. Handlers use this
+// schedulable setting enabled). Recorded rate-limit windows are reported
+// separately (AllModelAccountsRateLimited / NextRateLimitResetAt) so handlers
+// can answer 429 with a reset time instead of a generic 503. Handlers use this
 // on the "no available accounts" error path to distinguish 404
 // model_not_found from 503 service_unavailable.
 type ModelAvailabilityDiagnosis struct {
@@ -24,6 +26,14 @@ type ModelAvailabilityDiagnosis struct {
 	// HasRetiredSubscriptionModel records a ChatGPT upstream blocked by model
 	// retirement, so an unsupported request can include migration guidance.
 	HasRetiredSubscriptionModel bool
+	// AllModelAccountsRateLimited reports that every account whose model
+	// mapping admits the requested model sits inside an active rate-limit
+	// window. Handlers turn this into 429 + Retry-After so clients surface the
+	// exhausted quota instead of retrying a generic 503 forever.
+	AllModelAccountsRateLimited bool
+	// NextRateLimitResetAt is the earliest reset time among the rate-limited
+	// accounts above (zero value when no reset time is recorded).
+	NextRateLimitResetAt time.Time
 }
 
 // ModelAvailabilityDiagnoser is implemented by gateway services that can

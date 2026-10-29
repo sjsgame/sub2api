@@ -22,6 +22,8 @@ func TestOpenAISubscriptionLongContextExempt(t *testing.T) {
 		{name: "空账号", result: &OpenAIForwardResult{Model: "gpt-6.1-sol"}},
 		{name: "空结果", account: oauth},
 		{name: "订阅", account: oauth, result: &OpenAIForwardResult{Model: "gpt-6.1-sol"}, want: true},
+		{name: "Terra 订阅", account: oauth, result: &OpenAIForwardResult{Model: "gpt-6.1-terra"}, want: true},
+		{name: "Terra 压缩", account: oauth, result: &OpenAIForwardResult{Model: "gpt-6.1-terra-openai-compact"}, want: true},
 		{name: "别名", account: oauth, result: &OpenAIForwardResult{Model: "openai/GPT_6.1_SOL-max"}, want: true},
 		{name: "压缩", account: oauth, result: &OpenAIForwardResult{Model: "gpt-6.1-sol-openai-compact"}, want: true},
 		{name: "映射到目标", account: oauth, result: &OpenAIForwardResult{Model: "custom", UpstreamModel: "gpt-6.1-sol"}, want: true},
