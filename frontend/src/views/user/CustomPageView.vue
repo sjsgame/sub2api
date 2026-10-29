@@ -247,7 +247,7 @@ const embeddedUrl = computed(() => {
   return buildEmbeddedUrl(
     menuItem.value.url,
     authStore.user?.id,
-    authStore.token,
+    null, // 不把登录 JWT 拼进 iframe URL：嵌入页会把 query 写进访问日志
     pageTheme.value,
     locale.value,
   )

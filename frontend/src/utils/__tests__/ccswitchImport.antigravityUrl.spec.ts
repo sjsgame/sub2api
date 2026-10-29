@@ -20,3 +20,28 @@ describe('Antigravity CC Switch endpoint', () => {
     }
   })
 })
+
+describe('Antigravity CC Switch Codex import', () => {
+  const build = (codexModel?: string) => new URL(buildCcSwitchImportDeeplink({
+    baseUrl: 'https://api.example.com/',
+    clientType: 'codex',
+    platform: 'antigravity',
+    providerName: 'Sub2API',
+    apiKey: 'sk-test',
+    usageScript: 'return true',
+    codexModel
+  }))
+
+  it('imports Codex against the root gateway endpoint, not /antigravity', () => {
+    const url = build('gemini-3.8-flash')
+    expect(url.searchParams.get('app')).toBe('codex')
+    // Codex speaks /v1/responses on the root path; /antigravity would 404.
+    expect(url.searchParams.get('endpoint')).toBe('https://api.example.com')
+    expect(url.searchParams.get('model')).toBe('gemini-3.8-flash')
+  })
+
+  it('falls back to the antigravity default model when no model is supplied', () => {
+    expect(build().searchParams.get('model')).toBe('claude-sonnet-4-6')
+    expect(build('   ').searchParams.get('model')).toBe('claude-sonnet-4-6')
+  })
+})

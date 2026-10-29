@@ -1713,6 +1713,7 @@ export default {
         geminiFlashDaily: 'Flash',
         gemini3Pro: 'G3P',
         gemini3Flash: 'G3F',
+        gemini4Argon: 'G4A',
         gemini3Image: 'G31FI',
         claude: 'Claude',
         grokRequests: 'Req',

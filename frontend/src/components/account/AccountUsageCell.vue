@@ -313,6 +313,14 @@
           :resets-at="antigravity3FlashUsageFromAPI.resetTime"
           color="emerald"
         />
+        <!-- Gemini 4 Argon（上游独立配额池，与 3.x Flash 分开计） -->
+        <UsageProgressBar
+          v-if="antigravity4ArgonUsageFromAPI !== null"
+          :label="t('admin.accounts.usageWindow.gemini4Argon')"
+          :utilization="antigravity4ArgonUsageFromAPI.utilization"
+          :resets-at="antigravity4ArgonUsageFromAPI.resetTime"
+          color="rose"
+        />
 
         <!-- Gemini 3 Image -->
         <UsageProgressBar
@@ -933,8 +941,21 @@ const antigravity3ProUsageFromAPI = computed(() =>
   getAntigravityUsageFromAPI(['gemini-3-pro-low', 'gemini-3-pro-high', 'gemini-3-pro-preview'])
 )
 
-// Gemini 3 Flash from API
-const antigravity3FlashUsageFromAPI = computed(() => getAntigravityUsageFromAPI(['gemini-3-flash']))
+// Gemini 3 Flash from API（含 3.8 Flash 同池档位，取最高利用率）
+const antigravity3FlashUsageFromAPI = computed(() =>
+  getAntigravityUsageFromAPI([
+    'gemini-3-flash',
+    'gemini-3.8-flash', 'gemini-3.8-flash-high', 'gemini-3.8-flash-medium',
+    'gemini-3.8-flash-low', 'gemini-3.8-flash-tiered',
+  ])
+)
+
+// Gemini 4 Argon from API（上游独立配额池，三个思考档位共用同一池）
+const antigravity4ArgonUsageFromAPI = computed(() =>
+  getAntigravityUsageFromAPI([
+    'gemini-4-argon', 'gemini-4-argon-high', 'gemini-4-argon-medium', 'gemini-4-argon-low',
+  ])
+)
 
 // Gemini Image from API
 const antigravity3ImageUsageFromAPI = computed(() =>
@@ -946,6 +967,9 @@ const antigravityClaudeUsageFromAPI = computed(() =>
   getAntigravityUsageFromAPI([
     'claude-fable-5-1',
     'claude-fable-5',
+    'claude-opus-5-5-high', 'claude-opus-5-5-medium', 'claude-opus-5-5-low', 'claude-opus-5-5',
+    'claude-sonnet-5-5-high', 'claude-sonnet-5-5-medium', 'claude-sonnet-5-5-low', 'claude-sonnet-5-5',
+    'claude-opus-5', 'claude-sonnet-5',
     'claude-sonnet-4-5', 'claude-opus-4-5-thinking',
     'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-opus-4-6-thinking',
     'claude-opus-4-7', 'claude-opus-4-8',

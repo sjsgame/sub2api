@@ -450,6 +450,56 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('admin.accounts.usageWindow.gemini3Image|70|2026-03-01T09:00:00Z')
   })
 
+  it('Antigravity 为 Gemini 4 Argon 独立配额池渲染单独窗口，并聚合 3.8 Flash', async () => {
+    getUsage.mockResolvedValue({
+      antigravity_quota: {
+        'gemini-3.8-flash-high': {
+          utilization: 12,
+          reset_time: '2026-03-02T10:00:00Z'
+        },
+        'gemini-4-argon-high': {
+          utilization: 99.57,
+          reset_time: '2026-03-05T10:00:00Z'
+        },
+        'gemini-4-argon-medium': {
+          utilization: 10,
+          reset_time: '2026-03-05T10:00:00Z'
+        }
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 1002,
+          platform: 'antigravity',
+          type: 'oauth',
+          extra: {}
+        })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    // Gemini 4 Argon 是上游独立配额池，不能被并进 3.x Flash 窗口。
+    expect(wrapper.text()).toContain(
+      'admin.accounts.usageWindow.gemini4Argon|99.57|2026-03-05T10:00:00Z'
+    )
+    // 3.8 Flash 档位与 gemini-3-flash 共用 G3F 窗口聚合。
+    expect(wrapper.text()).toContain(
+      'admin.accounts.usageWindow.gemini3Flash|12|2026-03-02T10:00:00Z'
+    )
+  })
+
   it('Antigravity 会显示 AI Credits 余额信息', async () => {
     getUsage.mockResolvedValue({
       ai_credits: [

@@ -2,8 +2,11 @@ import type { GroupPlatform } from '@/types'
 
 export const OPENAI_CC_SWITCH_CODEX_MODEL = 'gpt-5.5'
 export const GROK_CC_SWITCH_MODEL = 'grok-4.5'
-
-export type CcSwitchClientType = 'claude' | 'gemini'
+// Antigravity 分组的 Codex 导入兜底模型：与 UseKeyModal 的 antigravity 默认模型保持一致，
+// 调用方应优先传分组白名单里的实际模型，避免上游 404 model_not_found。
+export const ANTIGRAVITY_CC_SWITCH_CODEX_MODEL = 'claude-sonnet-4-6'
+// 'codex' 只用于 antigravity 分组：Codex 走 Responses 协议，base_url 用根路径而不是 /antigravity
+export type CcSwitchClientType = 'claude' | 'gemini' | 'codex'
 
 export interface CcSwitchImportConfig {
   app: string
@@ -18,6 +21,8 @@ export interface CcSwitchImportDeeplinkInput {
   providerName: string
   apiKey: string
   usageScript: string
+  /** Codex 供应商写入 config.toml 的模型名；为空时用平台兜底模型 */
+  codexModel?: string
 }
 
 /**
@@ -57,10 +62,20 @@ function withoutTrailingSlashes(baseUrl: string): string {
 export function resolveCcSwitchImportConfig(
   platform: GroupPlatform | undefined | null,
   clientType: CcSwitchClientType,
-  baseUrl: string
+  baseUrl: string,
+  codexModel?: string
 ): CcSwitchImportConfig {
   switch (platform || 'anthropic') {
     case 'antigravity':
+      if (clientType === 'codex') {
+        return {
+          app: 'codex',
+          // Codex 的 Responses 端点在网关根路径上（/v1/responses），带 /antigravity 会 404；
+          // CC Switch 的 Codex 供应商会自行拼接 OpenAI 兼容路径，所以这里也只给根地址。
+          endpoint: withoutTrailingSlashes(baseUrl),
+          model: (codexModel || '').trim() || ANTIGRAVITY_CC_SWITCH_CODEX_MODEL
+        }
+      }
       return {
         app: clientType === 'gemini' ? 'gemini' : 'claude',
         endpoint: `${baseUrl.replace(/\/+$/, '')}/antigravity`
@@ -93,7 +108,7 @@ export function resolveCcSwitchImportConfig(
 }
 
 export function buildCcSwitchImportDeeplink(input: CcSwitchImportDeeplinkInput): string {
-  const config = resolveCcSwitchImportConfig(input.platform, input.clientType, input.baseUrl)
+  const config = resolveCcSwitchImportConfig(input.platform, input.clientType, input.baseUrl, input.codexModel)
   const entries: [string, string][] = [
     ['resource', 'provider'],
     ['app', config.app],

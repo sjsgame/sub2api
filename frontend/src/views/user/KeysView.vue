@@ -1091,7 +1091,7 @@
         <p class="text-sm text-gray-600 dark:text-gray-400">
           {{ t('keys.ccsClientSelect.description') }}
 	        </p>
-	        <div class="grid grid-cols-2 gap-3">
+	        <div class="grid grid-cols-3 gap-3">
 	          <button
 	            @click="handleCcsClientSelect('claude')"
 	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
@@ -1114,6 +1114,18 @@
 	            }}</span>
 	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
 	              t('keys.ccsClientSelect.geminiCliDesc')
+	            }}</span>
+	          </button>
+	          <button
+	            @click="handleCcsClientSelect('codex')"
+	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
+	          >
+	            <Icon name="cpu" size="xl" class="text-gray-600 dark:text-gray-400" />
+	            <span class="font-medium text-gray-900 dark:text-white">{{
+	              t('keys.ccsClientSelect.codex')
+	            }}</span>
+	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
+	              t('keys.ccsClientSelect.codexDesc')
 	            }}</span>
 	          </button>
 	        </div>
@@ -2023,7 +2035,31 @@ const importToCcswitch = (row: ApiKey) => {
   executeCcsImport(row, platform === 'gemini' ? 'gemini' : 'claude')
 }
 
-const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
+// Codex 导入必须写一个该 Key 真正可用的模型名，否则 CC Switch 会保留默认
+// gpt-5.5 而被分组白名单拦成 404 model_not_found。普通用户看不到分组白名单，
+// 所以这里用该 Key 反查网关 /v1/models（返回的就是它真能用的模型）。
+const resolveCcsCodexModel = async (row: ApiKey): Promise<string> => {
+  const base = (publicSettings.value?.api_base_url || window.location.origin).replace(/\/+$/, '')
+  try {
+    const resp = await fetch(`${base}/v1/models`, {
+      headers: { Authorization: `Bearer ${row.key}` }
+    })
+    if (resp.ok) {
+      const body = await resp.json()
+      const ids: string[] = (body?.data ?? [])
+        .map((item: { id?: string }) => item?.id)
+        .filter((id: string | undefined): id is string => !!id)
+      const preferred = ids.find((id: string) => /^(gemini|claude|gpt|o[34])/i.test(id))
+      if (preferred) return preferred
+      if (ids[0]) return ids[0]
+    }
+  } catch {
+    // 拿不到就交给平台兜底模型
+  }
+  return ''
+}
+
+const executeCcsImport = async (row: ApiKey, clientType: CcSwitchClientType) => {
   const baseUrl = publicSettings.value?.api_base_url || window.location.origin
   const platform = row.group?.platform || 'anthropic'
 
@@ -2035,7 +2071,8 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
     clientType,
     providerName,
     apiKey: row.key,
-    usageScript
+    usageScript,
+    codexModel: clientType === 'codex' ? await resolveCcsCodexModel(row) : undefined
   })
 
   try {
