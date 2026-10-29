@@ -59,5 +59,12 @@ func TestGPT61SolIdentityAndEffort(t *testing.T) {
 		require.Error(t, ValidateGPT61SolReasoningEffort("gpt-6.1-sol", effort))
 		require.NoError(t, ValidateGPT61SolReasoningEffort("gpt-6-sol", effort))
 	}
-	require.Contains(t, CodexBaseInstructionsForModel("gpt-6.1-sol"), "based on GPT-6")
+	solTemplate := CodexBaseInstructionsForModel("gpt-6.1-sol")
+	require.Contains(t, solTemplate, "based on GPT-6")
+	// Terra ships the same Codex capability surface as Sol (its official
+	// descriptor differs only in slug/display name), so it must advertise the
+	// GPT-6.1 prompt instead of falling through to the generic latest one.
+	for _, id := range []string{"gpt-6.1-terra", "gpt-6.1-terra-max"} {
+		require.Equal(t, solTemplate, CodexBaseInstructionsForModel(id), id)
+	}
 }

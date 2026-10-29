@@ -139,6 +139,7 @@ func CanonicalizeOpenAIModelAliasSpelling(model string) string {
 }
 
 // CodexBaseInstructionsForModel 按模型返回最匹配的真实 Codex base instructions：
+//   - gpt-6.1-sol / gpt-6.1-terra（含 effort 后缀）→ GPT-6.1 prompt（两者官方模板逐字节一致）
 //   - gpt-6 / gpt-6-astra（含供应商前缀与日期变体）→ GPT-6 Astra prompt
 //   - 含 "codex" 的模型（gpt-5-codex / gpt-5.x-codex / codex-max / spark 等）→ GPT-5-Codex prompt
 //   - gpt-5.5 系非 codex 模型 → GPT-5.5 prompt
@@ -150,7 +151,7 @@ func CanonicalizeOpenAIModelAliasSpelling(model string) string {
 func CodexBaseInstructionsForModel(model string) string {
 	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
 	switch {
-	case IsGPT61SolModelSpelling(canonical):
+	case IsGPT61SolModelSpelling(canonical) || IsGPT61TerraModelSpelling(canonical):
 		var metadata struct {
 			ModelMessages struct {
 				InstructionsTemplate string `json:"instructions_template"`
