@@ -200,9 +200,14 @@ func openAICompatibleSelectionErrorForLog(err error, platform string) error {
 }
 
 // rateLimitedNoAccountClassification answers 429 with a message that names the
-// exhausted upstream quota and, when known, when that window reopens. The
-// previous 503 "Service temporarily unavailable" told the end user nothing and
-// made clients retry immediately instead of waiting for the reset.
+// exhausted quota and, when known, when that window reopens. The previous 503
+// "Service temporarily unavailable" told the end user nothing and made clients
+// retry immediately instead of waiting for the reset.
+//
+// The message deliberately says nothing about how the gateway sources the model:
+// end users must not learn that traffic is served by a pooled set of upstream
+// accounts. The reset time is rendered in UTC so the client-facing error does
+// not leak the gateway host's timezone either.
 func rateLimitedNoAccountClassification(displayModel string, resetAt time.Time) noAccountErrorClassification {
 	target := "the requested model"
 	if model := strings.TrimSpace(displayModel); model != "" {
@@ -212,7 +217,7 @@ func rateLimitedNoAccountClassification(displayModel string, resetAt time.Time) 
 		return noAccountErrorClassification{
 			Status:  http.StatusTooManyRequests,
 			ErrType: "rate_limit_error",
-			Message: fmt.Sprintf("Usage limit reached: every upstream account serving %s is temporarily rate-limited. Please retry later.", target),
+			Message: fmt.Sprintf("Usage limit reached: the quota for %s is temporarily rate-limited. Please retry later.", target),
 		}
 	}
 	seconds := int(time.Until(resetAt).Seconds())
@@ -222,9 +227,25 @@ func rateLimitedNoAccountClassification(displayModel string, resetAt time.Time) 
 	return noAccountErrorClassification{
 		Status:            http.StatusTooManyRequests,
 		ErrType:           "rate_limit_error",
-		Message:           fmt.Sprintf("Usage limit reached: every upstream account serving %s has used up its current quota window. It resets at %s (in about %d min), so retrying before then cannot succeed.", target, resetAt.Local().Format("2006-01-02 15:04 MST"), (seconds+59)/60),
-		RetryAfterSeconds: seconds,
+		Message:           fmt.Sprintf("Usage limit reached: the quota for %s is exhausted. It resets at %s (in about %d min), so retrying before then cannot succeed.", target, resetAt.UTC().Format("2006-01-02 15:04 UTC"), (seconds+59)/60),
+		RetryAfterSeconds: clampNoAccountRetryAfter(seconds),
 	}
+}
+
+// maxNoAccountRetryAfterSeconds caps the published Retry-After. A reset timestamp
+// that is wrong (stale row, clock skew, mis-scoped window) must not make rate
+// limit aware clients sleep for days; six hours is longer than any upstream
+// quota window this gateway currently knows about.
+const maxNoAccountRetryAfterSeconds = 6 * 60 * 60
+
+func clampNoAccountRetryAfter(seconds int) int {
+	if seconds > maxNoAccountRetryAfterSeconds {
+		return maxNoAccountRetryAfterSeconds
+	}
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
 }
 
 // applyNoAccountRetryAfter publishes Retry-After for classifications that know

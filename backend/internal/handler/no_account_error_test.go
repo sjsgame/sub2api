@@ -375,3 +375,31 @@ func TestApplyNoAccountRetryAfter_PublishesHeaderOnlyBeforeStreaming(t *testing.
 	applyNoAccountRetryAfter(streaming, noAccountErrorClassification{RetryAfterSeconds: 90}, true)
 	require.Empty(t, streaming.Writer.Header().Get("Retry-After"))
 }
+
+// The 429 body is client-facing: it must not tell the caller that requests are
+// served by a pool of upstream accounts, and it must not leak the gateway host's
+// timezone through the formatted reset time.
+func TestRateLimitedNoAccountClassification_DoesNotLeakPoolOrTimezone(t *testing.T) {
+	cls := rateLimitedNoAccountClassification("gpt-6.1-terra", time.Now().Add(30*time.Minute))
+
+	require.Equal(t, http.StatusTooManyRequests, cls.Status)
+	require.NotContains(t, cls.Message, "account")
+	require.Contains(t, cls.Message, "gpt-6.1-terra")
+	require.Contains(t, cls.Message, "UTC")
+}
+
+// A wildly wrong reset timestamp must not turn into a multi-day Retry-After that
+// makes clients sleep long past the real window; the message still reports it.
+func TestRateLimitedNoAccountClassification_ClampsRetryAfter(t *testing.T) {
+	cls := rateLimitedNoAccountClassification("gpt-6.1-terra", time.Now().Add(48*time.Hour))
+
+	require.Equal(t, maxNoAccountRetryAfterSeconds, cls.RetryAfterSeconds)
+	require.Contains(t, cls.Message, "2880 min")
+}
+
+func TestClampNoAccountRetryAfter(t *testing.T) {
+	require.Equal(t, 1, clampNoAccountRetryAfter(0))
+	require.Equal(t, 1, clampNoAccountRetryAfter(-5))
+	require.Equal(t, 90, clampNoAccountRetryAfter(90))
+	require.Equal(t, maxNoAccountRetryAfterSeconds, clampNoAccountRetryAfter(maxNoAccountRetryAfterSeconds+1))
+}

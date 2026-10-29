@@ -73,13 +73,13 @@ func (s *OpenAIGatewayService) DiagnoseModelAvailabilityForPlatform(
 		}
 		diag.HasModelSupport = true
 		supporting++
-		reset := accounts[i].RateLimitResetAt
-		if reset == nil || !now.Before(*reset) {
+		reset, limited := rateLimitWindowForDiagnosis(ctx, &accounts[i], requestedModel, now)
+		if !limited {
 			continue
 		}
 		rateLimited++
 		if earliestReset.IsZero() || reset.Before(earliestReset) {
-			earliestReset = *reset
+			earliestReset = reset
 		}
 	}
 	// Claim "every account serving this model is rate-limited" only when the
@@ -90,4 +90,32 @@ func (s *OpenAIGatewayService) DiagnoseModelAvailabilityForPlatform(
 		diag.NextRateLimitResetAt = earliestReset
 	}
 	return diag
+}
+
+// rateLimitWindowForDiagnosis reports whether the account currently sits inside a
+// recorded rate-limit window that applies to requestedModel, and when that window
+// reopens. Two kinds of window exist and they do not have the same reach:
+//   - RateLimitResetAt is account-wide, so it blocks every model the account can serve.
+//   - The model_rate_limits snapshot (written by SetModelRateLimit) is scoped to the
+//     models its key names, so a window recorded for a sibling model must not be
+//     reported as an exhausted pool for this one.
+//
+// Only windows that actually block this request are counted; anything else stays a
+// plain "no available accounts" 503 so the client keeps retrying.
+func rateLimitWindowForDiagnosis(
+	ctx context.Context,
+	account *Account,
+	requestedModel string,
+	now time.Time,
+) (time.Time, bool) {
+	if account == nil {
+		return time.Time{}, false
+	}
+	if account.RateLimitResetAt != nil && now.Before(*account.RateLimitResetAt) {
+		return *account.RateLimitResetAt, true
+	}
+	if remaining := account.GetModelRateLimitRemainingTimeWithContext(ctx, requestedModel); remaining > 0 {
+		return now.Add(remaining), true
+	}
+	return time.Time{}, false
 }

@@ -28,11 +28,13 @@ type ModelAvailabilityDiagnosis struct {
 	HasRetiredSubscriptionModel bool
 	// AllModelAccountsRateLimited reports that every account whose model
 	// mapping admits the requested model sits inside an active rate-limit
-	// window. Handlers turn this into 429 + Retry-After so clients surface the
-	// exhausted quota instead of retrying a generic 503 forever.
+	// window that blocks this model (account-wide RateLimitResetAt or a
+	// model-scoped model_rate_limits entry for it). Handlers turn this into
+	// 429 + Retry-After so clients surface the exhausted quota instead of
+	// retrying a generic 503 forever.
 	AllModelAccountsRateLimited bool
-	// NextRateLimitResetAt is the earliest reset time among the rate-limited
-	// accounts above (zero value when no reset time is recorded).
+	// NextRateLimitResetAt is the earliest re-opening time among the
+	// rate-limited accounts above (zero value when no reset time is recorded).
 	NextRateLimitResetAt time.Time
 }
 
