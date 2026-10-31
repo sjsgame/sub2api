@@ -2059,12 +2059,16 @@ const resolveCcsCodexModel = async (row: ApiKey): Promise<string> => {
   return ''
 }
 
+// CC Switch 导入弹窗展示的供应商名称。站点名（site_name）默认取上游品牌
+// Sub2API，对外导入时改用部署方自己的品牌名，避免用户看到上游名称。
+const CC_SWITCH_PROVIDER_NAME = 'bbs2dpinyin'
+
 const executeCcsImport = async (row: ApiKey, clientType: CcSwitchClientType) => {
   const baseUrl = publicSettings.value?.api_base_url || window.location.origin
   const platform = row.group?.platform || 'anthropic'
 
   const usageScript = CC_SWITCH_USAGE_SCRIPT
-  const providerName = (publicSettings.value?.site_name || 'sub2api').trim() || 'sub2api'
+  const providerName = CC_SWITCH_PROVIDER_NAME
   const deeplink = buildCcSwitchImportDeeplink({
     baseUrl,
     platform,
