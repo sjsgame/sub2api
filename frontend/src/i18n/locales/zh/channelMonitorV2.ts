@@ -33,6 +33,7 @@ export default {
     trendView: { label: '趋势视图', pulse: '色块矩阵', line: '折线图', cards: '卡片' },
     cards: {
       userRate: '用户倍率',
+      model: '模型',
       healthDot: '健康状态',
       timeline: '近期健康时间线',
       noTraffic: '该时段无流量',

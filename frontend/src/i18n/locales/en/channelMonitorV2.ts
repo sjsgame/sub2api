@@ -33,6 +33,7 @@ export default {
     trendView: { label: 'Trend view', pulse: 'Pulse matrix', line: 'Line chart', cards: 'Cards' },
     cards: {
       userRate: 'User rate',
+      model: 'Model',
       healthDot: 'Health status',
       timeline: 'Recent health timeline',
       noTraffic: 'No traffic in this interval',

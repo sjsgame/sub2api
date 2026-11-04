@@ -268,6 +268,7 @@
           :health-mode="healthMode"
           :show-throughput="showThroughput"
           :rate-by-group="rateByGroup"
+          :model-by-group="modelByGroup"
         />
         <RelayPulseMatrix
           v-else-if="matrix"
@@ -575,6 +576,7 @@ const trendView = ref<TrendView>(parseTrendView(route.query.trend_view))
 const dimensions = ref<MonitorDimensions>({ platforms: [], groups: [], models: [] })
 const snapshot = ref<MonitorSnapshot | null>(null)
 const matrix = ref<MonitorMatrixResponse | null>(null)
+const matrixByModel = ref<MonitorMatrixResponse | null>(null)
 const modelRows = ref<MonitorModelRow[]>([])
 const errorRows = ref<MonitorErrorRow[]>([])
 const userRows = ref<MonitorUserRow[]>([])
@@ -735,16 +737,52 @@ async function loadDimensions(signal?: AbortSignal, id = sequence) {
 }
 
 async function loadMetrics(signal?: AbortSignal, id = sequence) {
-  const [nextSnapshot, nextMatrix] = await Promise.all([
+  const [nextSnapshot, nextMatrix, nextModelMatrix] = await Promise.all([
     api.getSnapshot(filter.value, isAdmin.value, signal),
     api.getMatrix(filter.value, matrixGroupBy.value, isAdmin.value, signal),
+    api.getMatrix(filter.value, 'platform_group_model', isAdmin.value, signal),
   ])
   if (id !== sequence) return
   snapshot.value = nextSnapshot
   matrix.value = nextMatrix
+  matrixByModel.value = nextModelMatrix
   scheduleAutoRefresh()
   await loadTab(signal, id)
 }
+
+/** 卡片标注：每个分组最近一个时间桶里请求量最大的模型（优先反映最新探测）。 */
+const modelByGroup = computed<Record<number, string>>(() => {
+  const latest: Record<number, { bucket: string; models: Record<string, number> }> = {}
+  for (const row of matrixByModel.value?.items || []) {
+    if (!row.group_id || !row.model || row.model === '__other__') continue
+    for (const bucket of row.buckets || []) {
+      if (!bucket.bucket_start) continue
+      const current = latest[row.group_id]
+      if (!current || bucket.bucket_start > current.bucket) {
+        latest[row.group_id] = {
+          bucket: bucket.bucket_start,
+          models: { [row.model]: bucket.metrics.request_count || 0 },
+        }
+      } else if (bucket.bucket_start === current.bucket) {
+        current.models[row.model] = (current.models[row.model] || 0) + (bucket.metrics.request_count || 0)
+      }
+    }
+  }
+  const out: Record<number, string> = { ...probeModelByGroup.value }
+  for (const [groupID, info] of Object.entries(latest)) {
+    if (out[Number(groupID)]) continue
+    let best = ''
+    let bestCount = -1
+    for (const [model, count] of Object.entries(info.models)) {
+      if (count > bestCount) {
+        best = model
+        bestCount = count
+      }
+    }
+    if (best) out[Number(groupID)] = best
+  }
+  return out
+})
 
 async function reload(silent = true) {
   controller?.abort()
@@ -944,6 +982,8 @@ watch(showUserRanking, (allowed) => {
 })
 // 卡片视图展示「用户倍率」：取用户可见分组的实际倍率（含专属倍率覆盖）。
 const rateByGroup = ref<Record<number, number>>({})
+// 分组描述里标注的探测模型（「探测模型: xxx」），卡片优先展示它。
+const probeModelByGroup = ref<Record<number, string>>({})
 
 async function loadGroupRates() {
   try {
@@ -952,12 +992,16 @@ async function loadGroupRates() {
       userGroupsAPI.getUserGroupRates(),
     ])
     const rates: Record<number, number> = {}
+    const probeModels: Record<number, string> = {}
     for (const group of groups) {
       if (typeof group.rate_multiplier === 'number') {
         rates[group.id] = overrides[group.id] ?? group.rate_multiplier
       }
+      const match = (group.description || '').match(/探测模型[:：]\s*(.+)/)
+      if (match) probeModels[group.id] = match[1].trim()
     }
     rateByGroup.value = rates
+    probeModelByGroup.value = probeModels
   } catch {
     // 倍率只是卡片展示增强，取不到时隐藏即可，不影响监控数据。
   }

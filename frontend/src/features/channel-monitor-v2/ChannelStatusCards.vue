@@ -20,6 +20,12 @@
                 <span v-if="rateMultiplier(row) !== null" class="font-medium text-rose-500">
                   {{ t('channelMonitorV2.cards.userRate') }} {{ rateMultiplier(row) }}x
                 </span>
+                <span
+                  v-if="groupModel(row)"
+                  class="inline-flex items-center rounded-md bg-sky-50 px-1.5 py-0.5 font-medium text-sky-600 dark:bg-sky-900/30 dark:text-sky-300"
+                >
+                  {{ t('channelMonitorV2.cards.model') }} {{ groupModel(row) }}
+                </span>
               </p>
             </div>
           </div>
@@ -104,8 +110,10 @@ const props = withDefaults(
     showThroughput?: boolean
     /** group_id -> 分组倍率（用户实际看到的倍率）。 */
     rateByGroup?: Record<number, number>
+    /** group_id -> 近期请求量最大的模型，用于标注该渠道主要服务的模型。 */
+    modelByGroup?: Record<number, string>
   }>(),
-  { showThroughput: true, rateByGroup: () => ({}) },
+  { showThroughput: true, rateByGroup: () => ({}), modelByGroup: () => ({}) },
 )
 
 const { t } = useI18n()
@@ -119,6 +127,11 @@ function rowKey(row: MonitorMatrixRow): string {
 
 function rowLabel(row: MonitorMatrixRow): string {
   return row.group_name || row.model || row.platform
+}
+
+function groupModel(row: MonitorMatrixRow): string | null {
+  if (!row.group_id) return null
+  return props.modelByGroup[row.group_id] || null
 }
 
 function rateMultiplier(row: MonitorMatrixRow): string | null {
