@@ -30,7 +30,16 @@ export default {
     groupBy: {
       label: '展示维度', platform: '平台', platformGroup: '平台 / 分组', platformModel: '平台 / 模型', platformGroupModel: '平台 / 分组 / 模型'
     },
-    trendView: { label: '趋势视图', pulse: '色块矩阵', line: '折线图' },
+    trendView: { label: '趋势视图', pulse: '色块矩阵', line: '折线图', cards: '卡片' },
+    cards: {
+      userRate: '用户倍率',
+      healthDot: '健康状态',
+      timeline: '近期健康时间线',
+      noTraffic: '该时段无流量',
+      past: '较早',
+      now: '现在',
+      empty: '暂无渠道监控数据',
+    },
     healthMode: { label: '健康显示', overall: '综合', success: '错误率', ttft: '首 Token', cache: '缓存率' },
     tabs: { aria: '明细维度', models: '模型', errors: '错误原因', users: '用户排行' },
     metrics: {

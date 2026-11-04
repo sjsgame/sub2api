@@ -30,7 +30,16 @@ export default {
     groupBy: {
       label: 'Group by', platform: 'Platform', platformGroup: 'Platform / Group', platformModel: 'Platform / Model', platformGroupModel: 'Platform / Group / Model'
     },
-    trendView: { label: 'Trend view', pulse: 'Pulse matrix', line: 'Line chart' },
+    trendView: { label: 'Trend view', pulse: 'Pulse matrix', line: 'Line chart', cards: 'Cards' },
+    cards: {
+      userRate: 'User rate',
+      healthDot: 'Health status',
+      timeline: 'Recent health timeline',
+      noTraffic: 'No traffic in this interval',
+      past: 'Past',
+      now: 'Now',
+      empty: 'No channel monitor data yet',
+    },
     healthMode: { label: 'Health display', overall: 'Overall', success: 'Error rate', ttft: 'First token', cache: 'Cache rate' },
     tabs: { aria: 'Detail dimension', models: 'Models', errors: 'Error reasons', users: 'User ranking' },
     metrics: {

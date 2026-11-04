@@ -171,6 +171,14 @@
             >
               {{ t('channelMonitorV2.trendView.line') }}
             </button>
+            <button
+              type="button"
+              class="tab !px-2 !py-1 text-xs"
+              :class="trendView === 'cards' ? 'tab-active' : ''"
+              @click="trendView = 'cards'"
+            >
+              {{ t('channelMonitorV2.trendView.cards') }}
+            </button>
           </div>
 
           <div
@@ -253,6 +261,13 @@
           :trend="snapshot?.trend || []"
           :coverage="snapshot?.coverage || null"
           :loading="loading && !snapshot"
+        />
+        <ChannelStatusCards
+          v-else-if="trendView === 'cards' && matrix"
+          :rows="matrixRows"
+          :health-mode="healthMode"
+          :show-throughput="showThroughput"
+          :rate-by-group="rateByGroup"
         />
         <RelayPulseMatrix
           v-else-if="matrix"
@@ -470,6 +485,8 @@ import MetricCell from '@/features/channel-monitor-v2/MetricCell.vue'
 import MonitorRankBadge from '@/features/channel-monitor-v2/MonitorRankBadge.vue'
 import MonitorTrendChart from '@/features/channel-monitor-v2/MonitorTrendChart.vue'
 import RelayPulseMatrix from '@/features/channel-monitor-v2/RelayPulseMatrix.vue'
+import ChannelStatusCards from '@/features/channel-monitor-v2/ChannelStatusCards.vue'
+import { userGroupsAPI } from '@/api/groups'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -503,7 +520,7 @@ import {
 
 type Tab = 'models' | 'errors' | 'users'
 type HealthMode = 'overall' | 'success' | 'ttft' | 'cache'
-type TrendView = 'pulse' | 'line'
+type TrendView = 'pulse' | 'line' | 'cards'
 
 const route = useRoute()
 const router = useRouter()
@@ -687,7 +704,8 @@ function parseHealthMode(value: unknown): HealthMode {
   return allowed.includes(value as HealthMode) ? (value as HealthMode) : 'overall'
 }
 function parseTrendView(value: unknown): TrendView {
-  return value === 'line' ? 'line' : 'pulse'
+  if (value === 'line' || value === 'cards') return value
+  return 'pulse'
 }
 function syncQuery() {
   void router.replace({
@@ -698,7 +716,7 @@ function syncQuery() {
       model: filter.value.models.join(',') || undefined,
       group_by: matrixGroupBy.value,
       health_mode: healthMode.value,
-      trend_view: trendView.value === 'line' ? 'line' : undefined,
+      trend_view: trendView.value === 'pulse' ? undefined : trendView.value,
       tab: activeTab.value,
     },
   })
@@ -924,7 +942,31 @@ watch(showUserRanking, (allowed) => {
     activeTab.value = 'models'
   }
 })
-onMounted(() => void reload(false))
+// 卡片视图展示「用户倍率」：取用户可见分组的实际倍率（含专属倍率覆盖）。
+const rateByGroup = ref<Record<number, number>>({})
+
+async function loadGroupRates() {
+  try {
+    const [groups, overrides] = await Promise.all([
+      userGroupsAPI.getAvailable(),
+      userGroupsAPI.getUserGroupRates(),
+    ])
+    const rates: Record<number, number> = {}
+    for (const group of groups) {
+      if (typeof group.rate_multiplier === 'number') {
+        rates[group.id] = overrides[group.id] ?? group.rate_multiplier
+      }
+    }
+    rateByGroup.value = rates
+  } catch {
+    // 倍率只是卡片展示增强，取不到时隐藏即可，不影响监控数据。
+  }
+}
+
+onMounted(() => {
+  void reload(false)
+  void loadGroupRates()
+})
 onBeforeUnmount(() => {
   controller?.abort()
   if (autoRefreshTimer) window.clearInterval(autoRefreshTimer)
