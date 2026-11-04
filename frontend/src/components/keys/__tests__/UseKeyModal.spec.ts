@@ -726,7 +726,7 @@ describe('UseKeyModal', () => {
       name: 'GPT-6.1 Terra',
       limit: { context: 1050000, output: 128000 },
       options: { store: false },
-      variants: { none: {}, low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
+      variants: { low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
     })
     expect(models['gpt-6-sol'].variants).toHaveProperty('none')
     expect(models['gpt-6-luna'].limit).toEqual({ context: 1050000, output: 128000 })
