@@ -97,7 +97,7 @@
               :key="index"
               class="h-3.5 flex-1 rounded-[2px]"
               :class="slot.bucket ? bucketClass(slot.bucket.health) : 'bg-gray-200 dark:bg-dark-600'"
-              :title="slot.bucket ? bucketTooltip(slot.bucket) : `${formatBucketTime(slot.start)} · 无流量`"
+              :title="slot.bucket ? bucketTooltip(slot.bucket) : `${bucketRangeLabel(slot.start)} · 无流量`"
             ></i>
           </div>
           <div class="mt-1.5 flex justify-between text-[10px] text-gray-400 dark:text-dark-500">
@@ -399,8 +399,9 @@ function alignedBuckets(row: MonitorMatrixRow): BucketSlot[] {
   if (!cov) return row.buckets.map((bucket) => ({ start: bucket.bucket_start, bucket }))
   const step = Math.max(60, cov.bucket_seconds) * 1000
   const start = new Date(cov.requested_start).getTime()
-  const endRaw = cov.requested_end ? new Date(cov.requested_end).getTime() : NaN
-  const end = Number.isFinite(endRaw) && endRaw > start ? endRaw : new Date(cov.data_through).getTime()
+  // 只画聚合已覆盖的时间段；未完成的当前桶没有数据，显示会误标成「无流量」。
+  const endRaw = cov.data_through ? new Date(cov.data_through).getTime() : NaN
+  const end = Number.isFinite(endRaw) && endRaw > start ? endRaw : new Date(cov.requested_end || cov.data_through).getTime()
   if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end || step <= 0) {
     return row.buckets.map((bucket) => ({ start: bucket.bucket_start, bucket }))
   }
@@ -418,12 +419,19 @@ function alignedBuckets(row: MonitorMatrixRow): BucketSlot[] {
   return slots.slice(-24)
 }
 
+function bucketRangeLabel(startIso: string): string {
+  const step = Math.max(60, coverage.value?.bucket_seconds || 300) * 1000
+  const start = new Date(startIso).getTime()
+  const end = new Date(start + step).toISOString()
+  return `${formatBucketTime(startIso)}-${formatBucketTime(end)}`
+}
+
 function bucketTooltip(bucket: MonitorMatrixBucket): string {
-  const time = formatBucketTime(bucket.bucket_start)
+  const range = bucketRangeLabel(bucket.bucket_start)
   const avail = formatPercent(1 - bucket.metrics.error_rate)
   const cache = formatPercent(bucket.metrics.cache_rate)
   const ttft = formatMs(bucket.metrics.ttft.p50_ms)
-  return `${time} · 可用率 ${avail} · 缓存率 ${cache} · 首 Token ${ttft}`
+  return `${range} · 可用率 ${avail} · 缓存率 ${cache} · 首 Token ${ttft}`
 }
 
 function bucketClass(health: { overall?: string }): string {
