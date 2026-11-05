@@ -71,8 +71,8 @@
                 </p>
               </div>
             </div>
-            <span :class="['shrink-0 rounded-full px-2 py-0.5 text-xs font-medium', statusClass(row.health.overall)]">
-              {{ statusLabel(row.health.overall) }}
+            <span :class="['shrink-0 rounded-full px-2 py-0.5 text-xs font-medium', statusClass(effectiveStatus(row))]">
+              {{ statusLabel(effectiveStatus(row)) }}
             </span>
           </div>
 
@@ -83,7 +83,7 @@
             </div>
             <div>
               <dt class="text-xs text-gray-500 dark:text-dark-400">可用率</dt>
-              <dd class="mt-0.5 text-lg font-semibold text-emerald-600 dark:text-emerald-400">{{ formatPercent(1 - row.metrics.error_rate) }}</dd>
+              <dd :class="['mt-0.5 text-lg font-semibold', availabilityClass(row)]">{{ formatPercent(1 - row.metrics.error_rate) }}</dd>
             </div>
             <div>
               <dt class="text-xs text-gray-500 dark:text-dark-400">首 TOKEN</dt>
@@ -105,32 +105,46 @@
             <span>现在</span>
           </div>
 
-          <div v-if="iqRounds(row).length" class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700">
+          <div v-if="iqTimelineAvailable(row)" class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700">
             <div class="flex items-center justify-between text-xs">
-              <span class="text-gray-500 dark:text-dark-400">降智检测 · 近 {{ iqRounds(row).length }} 次</span>
-              <span :class="['rounded-full px-2 py-0.5 font-medium', iqStatusClass(iqLatest(row)?.status)]">
-                {{ iqStatusText(iqLatest(row)?.status) || '暂无数据' }}
+              <span class="text-gray-500 dark:text-dark-400">渠道检测 · {{ rangeLabel }}</span>
+            </div>
+            <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+              <span class="inline-flex items-center gap-1">
+                <span class="text-gray-500 dark:text-dark-400">可用性</span>
+                <span :class="['rounded-full px-1.5 py-0.5 font-medium', iqAvailabilityClass(row)]">{{ iqAvailabilityLabel(row) || '暂无' }}</span>
               </span>
+              <span class="inline-flex items-center gap-1">
+                <span class="text-gray-500 dark:text-dark-400">推理</span>
+                <span :class="['rounded-full px-1.5 py-0.5 font-medium', iqReasoningClass(row)]">{{ iqReasoningLabel(row) || '暂无' }}</span>
+              </span>
+              <span class="inline-flex items-center gap-1">
+                <span class="text-gray-500 dark:text-dark-400">生成</span>
+                <span :class="['rounded-full px-1.5 py-0.5 font-medium', iqPelicanClass(row)]">{{ iqPelicanLabel(row) || '暂无' }}</span>
+              </span>
+            </div>
+            <div v-if="iqFailureReason(row)" class="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] leading-4 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400">
+              长请求失败：{{ iqFailureReason(row) }}
             </div>
             <div class="mt-2 flex items-end gap-[2px]">
               <i
-                v-for="(round, index) in iqRounds(row).slice(0, 24).reverse()"
+                v-for="(slot, index) in alignedBuckets(row)"
                 :key="index"
                 class="h-2.5 flex-1 rounded-[2px]"
-                :class="iqDotClass(round.status)"
-                :title="iqRoundTooltip(round)"
+                :class="iqTimelineBarClass(row, slot.start)"
+                :title="iqTimelineTooltip(row, slot.start)"
               ></i>
             </div>
             <div class="mt-2 max-h-20 overflow-auto pr-1">
               <div class="grid grid-cols-4 gap-1">
                 <span
-                  v-for="round in iqRounds(row).slice(0, 30)"
-                  :key="round.round_id"
+                  v-for="slot in alignedBuckets(row)"
+                  :key="slot.start"
                   class="inline-flex items-center gap-1 rounded-full border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-dark-700 dark:text-dark-400"
-                  :title="iqRoundTooltip(round)"
+                  :title="iqTimelineTooltip(row, slot.start)"
                 >
-                  <i class="h-1.5 w-1.5 shrink-0 rounded-full" :class="iqDotClass(round.status)"></i>
-                  {{ formatBucketTime(round.created_at).slice(6) }}
+                  <i class="h-1.5 w-1.5 shrink-0 rounded-full" :class="iqTimelineDotClass(row, slot.start)"></i>
+                  {{ formatBucketTime(slot.start).slice(6) }}
                 </span>
               </div>
             </div>
@@ -173,8 +187,8 @@
               <tr class="text-gray-900 dark:text-white">
                 <td class="py-3 pr-3 font-semibold">{{ detail.model === '__other__' ? '其他模型' : detail.model }}</td>
                 <td class="py-3 pr-3">
-                  <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', statusClass(detail.health.overall)]">
-                    {{ statusLabel(detail.health.overall) }}
+                  <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', statusClass(effectiveStatus(detail))]">
+                    {{ statusLabel(effectiveStatus(detail)) }}
                   </span>
                 </td>
                 <td class="py-3 pr-3">{{ detailLoading ? '…' : detailStats.latency || '-' }}</td>
@@ -185,6 +199,14 @@
             </tbody>
           </table>
         </div>
+
+        <p v-if="iqFailureReason(detail)" class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:bg-rose-900/30 dark:text-rose-400">
+          长请求失败：{{ iqFailureReason(detail) }}
+        </p>
+        <p v-if="iqReasoningLabel(detail)" class="mt-2 flex items-center gap-1.5 text-xs">
+          <span class="text-gray-500 dark:text-dark-400">推理答案</span>
+          <span :class="['rounded-full px-2 py-0.5 font-medium', iqReasoningClass(detail)]">{{ iqReasoningLabel(detail) }}</span>
+        </p>
 
         <footer class="mt-6 flex justify-end">
           <button class="rounded-xl border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-dark-600 dark:text-dark-200 dark:hover:bg-dark-700" type="button" @click="closeDetail()">关闭</button>
@@ -217,6 +239,13 @@ const ranges: Array<{ value: MonitorRange; label: string }> = [
   { value: '30d', label: '30d' },
 ]
 const range = ref<MonitorRange>('90m')
+const RANGE_LABELS: Record<MonitorRange, string> = {
+  '90m': '近 90 分钟',
+  '24h': '近 24 小时',
+  '7d': '近 7 天',
+  '30d': '近 30 天',
+}
+const rangeLabel = computed(() => RANGE_LABELS[range.value])
 const rows = ref<MonitorMatrixRow[]>([])
 const coverage = ref<MonitorCoverage | null>(null)
 const loading = ref(false)
@@ -265,10 +294,28 @@ interface IqRound {
   created_at: string
 }
 
+interface IqCheck {
+  id: number
+  status: string
+  duration_ms: number
+  output_tokens: number | null
+  detail: string
+  created_at: string
+}
+
+interface IqTimelineSlot {
+  bucket_start: string
+  status: string | null
+}
+
 interface IqTarget {
   model: string
   group_id: number
   rounds: IqRound[]
+  timeline?: IqTimelineSlot[]
+  availability?: IqCheck[]
+  reasoning?: IqCheck[]
+  pelican?: IqCheck[]
 }
 
 const IQ_API = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'
@@ -279,7 +326,15 @@ const iqTargets = ref<Record<string, IqTarget>>({})
 
 async function loadIq() {
   try {
-    const res = await fetch(`${IQ_API}/api/summary`)
+    const params = new URLSearchParams({ range: range.value })
+    const cov = coverage.value
+    if (cov) {
+      const end = cov.requested_end || cov.data_through
+      params.set('start', cov.requested_start)
+      if (end) params.set('end', end)
+      params.set('bucket', String(cov.bucket_seconds))
+    }
+    const res = await fetch(`${IQ_API}/api/summary?${params.toString()}`)
     if (!res.ok) return
     const data = (await res.json()) as { targets?: IqTarget[] }
     const map: Record<string, IqTarget> = {}
@@ -292,30 +347,146 @@ async function loadIq() {
   }
 }
 
-function iqRounds(row: MonitorMatrixRow): IqRound[] {
-  return iqTargets.value[`${row.model}:${row.group_id}`]?.rounds || []
+function iqTimeline(row: MonitorMatrixRow): IqTimelineSlot[] {
+  return iqTargets.value[`${row.model}:${row.group_id}`]?.timeline || []
 }
 
-function iqLatest(row: MonitorMatrixRow): IqRound | null {
-  return iqRounds(row)[0] || null
+function iqTimelineAvailable(row: MonitorMatrixRow): boolean {
+  return iqTimeline(row).length > 0
+}
+
+function iqTimelineStatus(row: MonitorMatrixRow, bucketStart: string): string | null {
+  const ts = new Date(bucketStart).getTime()
+  if (!Number.isFinite(ts)) return null
+  const hit = iqTimeline(row).find((slot) => new Date(slot.bucket_start).getTime() === ts)
+  return hit?.status || null
+}
+
+function iqTimelineTooltip(row: MonitorMatrixRow, bucketStart: string): string {
+  const status = iqTimelineStatus(row, bucketStart)
+  return `${bucketRangeLabel(bucketStart)} · ${status ? iqStatusText(status) : '未检测'}`
+}
+
+function iqTimelineBarClass(row: MonitorMatrixRow, bucketStart: string): string {
+  const status = iqTimelineStatus(row, bucketStart)
+  return status ? iqDotClass(status) : 'bg-gray-200 dark:bg-dark-600'
+}
+
+function iqTimelineDotClass(row: MonitorMatrixRow, bucketStart: string): string {
+  const status = iqTimelineStatus(row, bucketStart)
+  return status ? iqDotClass(status) : 'bg-gray-300 dark:bg-dark-500'
+}
+
+// 超过 30 分钟的检测结果视为过期，避免检测服务停掉后一直把渠道标成异常。
+const IQ_STALE_MS = 30 * 60 * 1000
+
+function freshIqCheck(check: IqCheck | null | undefined): IqCheck | null {
+  if (!check) return null
+  const ts = new Date(check.created_at).getTime()
+  if (!Number.isFinite(ts) || Date.now() - ts > IQ_STALE_MS) return null
+  return check
+}
+
+// 可用性 = 非流式长请求能否完整返回；这是“渠道能不能用”的主信号。
+function iqAvailabilityLatest(row: MonitorMatrixRow): IqCheck | null {
+  return freshIqCheck(iqTargets.value[`${row.model}:${row.group_id}`]?.availability?.[0])
+}
+
+// 降智 = 流式拿到回答后答案是否正确；请求失败只表示无法判断。
+function iqReasoningLatest(row: MonitorMatrixRow): IqCheck | null {
+  return freshIqCheck(iqTargets.value[`${row.model}:${row.group_id}`]?.reasoning?.[0])
+}
+
+// 生成 = 长输出（鹈鹕 HTML）能否完整生成。
+function iqPelicanLatest(row: MonitorMatrixRow): IqCheck | null {
+  return freshIqCheck(iqTargets.value[`${row.model}:${row.group_id}`]?.pelican?.[0])
+}
+
+function iqFailureReason(row: MonitorMatrixRow): string {
+  const check = iqAvailabilityLatest(row)
+  if (!check || check.status !== 'fail') return ''
+  try {
+    const detail = JSON.parse(check.detail || '{}') as {
+      error?: string
+      http_status?: number
+      attempts?: number
+    }
+    const parts: string[] = []
+    if (detail.error) parts.push(detail.error)
+    if (detail.http_status) parts.push(`HTTP ${detail.http_status}`)
+    if (detail.attempts) parts.push(`${detail.attempts} 次尝试`)
+    return parts.join(' · ') || '请求失败'
+  } catch {
+    return '请求失败'
+  }
+}
+
+function iqReasoningLabel(row: MonitorMatrixRow): string {
+  const check = iqReasoningLatest(row)
+  if (!check) return ''
+  if (check.status === 'pass') return '通过'
+  if (check.status === 'warn') return '答案异常（疑似降智）'
+  return '无法判断（请求失败）'
+}
+
+function iqCheckClass(status: string | undefined): string {
+  if (status === 'pass') return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+  if (status === 'warn') return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
+  if (status === 'fail') return 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'
+  return 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-dark-300'
+}
+
+function iqReasoningClass(row: MonitorMatrixRow): string {
+  return iqCheckClass(iqReasoningLatest(row)?.status)
+}
+
+function iqAvailabilityLabel(row: MonitorMatrixRow): string {
+  const check = iqAvailabilityLatest(row)
+  if (!check) return ''
+  if (check.status === 'pass') return '通过'
+  if (check.status === 'warn') return '响应异常'
+  return '请求失败'
+}
+
+function iqAvailabilityClass(row: MonitorMatrixRow): string {
+  return iqCheckClass(iqAvailabilityLatest(row)?.status)
+}
+
+function iqPelicanLabel(row: MonitorMatrixRow): string {
+  const check = iqPelicanLatest(row)
+  if (!check) return ''
+  if (check.status === 'pass') return '通过'
+  if (check.status === 'warn') return '格式异常'
+  return '请求失败'
+}
+
+function iqPelicanClass(row: MonitorMatrixRow): string {
+  return iqCheckClass(iqPelicanLatest(row)?.status)
+}
+
+// 长请求失败优先于流量聚合健康度；流量正常但长请求全挂时，卡片仍显示异常。
+function effectiveStatus(row: MonitorMatrixRow): string {
+  const availability = iqAvailabilityLatest(row)
+  if (availability?.status === 'fail') return 'critical'
+  if (row.health.overall === 'healthy') {
+    if (availability?.status === 'warn') return 'warning'
+    if (iqReasoningLatest(row)?.status === 'warn') return 'warning'
+    if (iqPelicanLatest(row)?.status === 'fail') return 'warning'
+  }
+  return row.health.overall
+}
+
+function availabilityClass(row: MonitorMatrixRow): string {
+  const availability = 1 - row.metrics.error_rate
+  if (availability < 0.8) return 'text-rose-600 dark:text-rose-400'
+  if (availability < 0.95) return 'text-amber-600 dark:text-amber-400'
+  return 'text-emerald-600 dark:text-emerald-400'
 }
 
 function iqStatusText(status: string | undefined): string {
   return status ? IQ_STATUS[status] || status : ''
 }
 
-function iqStatusClass(status: string | undefined): string {
-  switch (status) {
-    case 'pass':
-      return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-    case 'warn':
-      return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
-    case 'fail':
-      return 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'
-    default:
-      return 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-dark-300'
-  }
-}
 
 function iqDotClass(status: string | undefined): string {
   switch (status) {
@@ -330,9 +501,6 @@ function iqDotClass(status: string | undefined): string {
   }
 }
 
-function iqRoundTooltip(round: IqRound): string {
-  return `${formatBucketTime(round.created_at)} · ${iqStatusText(round.status)}`
-}
 
 const detail = ref<MonitorMatrixRow | null>(null)
 const detailLoading = ref(false)
@@ -470,6 +638,8 @@ async function load() {
     updatedAt.value = res.coverage?.data_through
       ? `更新至 ${formatBucketTime(res.coverage.data_through)}`
       : ''
+    // 检测时间轴复用渠道状态的窗口与桶大小，保证两条时间轴的格子数和边界一致。
+    void loadIq()
   } catch (error) {
     if ((error as { name?: string }).name !== 'CanceledError') {
       // 保持上次数据
@@ -523,10 +693,8 @@ let timer: number | null = null
 onMounted(() => {
   void load()
   void loadGroupRates()
-  void loadIq()
   timer = window.setInterval(() => {
     void load()
-    void loadIq()
   }, 60_000)
 })
 
