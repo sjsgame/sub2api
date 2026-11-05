@@ -65,6 +65,15 @@ export function resolveCcSwitchImportConfig(
   baseUrl: string,
   codexModel?: string
 ): CcSwitchImportConfig {
+  // OpenAI 兼容渠道（openai / deepseek 等）导入成 Codex 配置。
+  if (clientType === 'codex' && (platform || 'anthropic') !== 'antigravity') {
+    return {
+      app: 'codex',
+      endpoint: withoutTrailingSlashes(baseUrl),
+      model: (codexModel || '').trim() || OPENAI_CC_SWITCH_CODEX_MODEL
+    }
+  }
+
   switch (platform || 'anthropic') {
     case 'antigravity':
       if (clientType === 'codex') {
@@ -86,7 +95,7 @@ export function resolveCcSwitchImportConfig(
         // CC Switch's Codex provider appends the OpenAI-compatible path itself.
         // Passing /v1 here can make the client request /v1/v1/....
         endpoint: withoutTrailingSlashes(baseUrl),
-        model: OPENAI_CC_SWITCH_CODEX_MODEL
+        model: (codexModel || '').trim() || OPENAI_CC_SWITCH_CODEX_MODEL
       }
     case 'gemini':
       return {

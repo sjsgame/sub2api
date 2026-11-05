@@ -2031,7 +2031,11 @@ const importToCcswitch = (row: ApiKey) => {
     return
   }
 
-  // For other platforms, execute directly
+  // OpenAI 平台（含 DeepSeek 这类 OpenAI 兼容渠道）走 Codex 配置。
+  if (platform === 'openai' || platform === 'deepseek') {
+    executeCcsImport(row, 'codex')
+    return
+  }
   executeCcsImport(row, platform === 'gemini' ? 'gemini' : 'claude')
 }
 
