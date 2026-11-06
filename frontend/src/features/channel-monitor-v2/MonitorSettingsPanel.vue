@@ -83,6 +83,24 @@
         </div>
       </div>
 
+      <div
+        class="card !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+          <div class="min-w-0">
+            <strong class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.iqTitle') }}</strong>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">{{ t('channelMonitorV2.settings.iqHint') }}</p>
+            <p v-if="iqUnavailable" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              {{ t('channelMonitorV2.settings.iqUnavailable') }}
+            </p>
+          </div>
+          <div class="flex shrink-0 items-center gap-3">
+            <span v-if="iqSaving" class="text-xs text-gray-400">{{ t('channelMonitorV2.settings.iqSaving') }}</span>
+            <Toggle data-testid="iq-detector-toggle" :modelValue="iqEnabled" @update:modelValue="toggleIq" />
+          </div>
+        </div>
+      </div>
+
       <div class="card overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
         <div class="card-header !py-3">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.platformsTitle') }}</h3>
@@ -290,7 +308,9 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import { getChannelMonitorMode, isChannelMonitorV2Mode } from '@/utils/featureFlags'
 import {
   getConfig,
+  getIQDetectorControl,
   updateConfig,
+  updateIQDetectorControl,
   MONITOR_ERROR_CATEGORIES,
   type MonitorConfig,
 } from '@/api/channelMonitorV2'
@@ -305,6 +325,9 @@ const draft = ref<MonitorConfig | null>(null)
 const original = ref('')
 const groups = ref<AdminGroup[]>([])
 const selectedPlatform = ref('')
+const iqEnabled = ref(false)
+const iqUnavailable = ref(false)
+const iqSaving = ref(false)
 const availablePlatforms = computed(() =>
   CONCRETE_PLATFORM_OPTIONS.filter(
     (option) => !draft.value?.platforms.some((platform) => platform.platform === option.value)
@@ -455,6 +478,34 @@ async function load() {
   }
 }
 
+async function loadIqControl() {
+  try {
+    const value = await getIQDetectorControl()
+    iqEnabled.value = value.enabled
+    iqUnavailable.value = false
+  } catch {
+    iqUnavailable.value = true
+  }
+}
+
+async function toggleIq(value: boolean) {
+  if (iqSaving.value) return
+  iqSaving.value = true
+  try {
+    const result = await updateIQDetectorControl(value)
+    iqEnabled.value = result.enabled
+    iqUnavailable.value = false
+    appStore.showSuccess(
+      t(result.enabled ? 'channelMonitorV2.settings.iqEnabled' : 'channelMonitorV2.settings.iqDisabled')
+    )
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.iqSaveFailed')))
+    await loadIqControl()
+  } finally {
+    iqSaving.value = false
+  }
+}
+
 async function save() {
   if (!draft.value) return
   saving.value = true
@@ -473,5 +524,8 @@ async function save() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadIqControl()
+})
 </script>

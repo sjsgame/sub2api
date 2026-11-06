@@ -269,3 +269,18 @@ export async function updateConfig(config: MonitorConfig) {
   const { data } = await apiClient.put<MonitorConfig>('/admin/channel-monitor-v2/config', config)
   return data
 }
+
+export interface IQDetectorControl {
+  enabled: boolean
+  running?: boolean
+}
+
+export async function getIQDetectorControl() {
+  const { data } = await apiClient.get<IQDetectorControl>('/admin/channel-monitor-v2/iq-detector')
+  return data
+}
+
+export async function updateIQDetectorControl(enabled: boolean) {
+  const { data } = await apiClient.post<IQDetectorControl>('/admin/channel-monitor-v2/iq-detector', { enabled })
+  return data
+}

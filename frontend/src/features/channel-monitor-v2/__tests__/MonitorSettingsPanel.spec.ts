@@ -8,6 +8,8 @@ import type { MonitorConfig } from '@/api/channelMonitorV2'
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
   updateConfig: vi.fn(),
+  getIQDetectorControl: vi.fn(),
+  updateIQDetectorControl: vi.fn(),
   groups: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -15,6 +17,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/api/channelMonitorV2', () => ({
   getConfig: mocks.getConfig,
   updateConfig: mocks.updateConfig,
+  getIQDetectorControl: mocks.getIQDetectorControl,
+  updateIQDetectorControl: mocks.updateIQDetectorControl,
   MONITOR_ERROR_CATEGORIES: ['authentication', 'network'],
 }))
 vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: mocks.groups } } }))
@@ -71,6 +75,7 @@ async function add(wrapper: Awaited<ReturnType<typeof panel>>, platform: string)
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.groups.mockResolvedValue([])
+  mocks.getIQDetectorControl.mockResolvedValue({ enabled: false })
   mocks.updateConfig.mockImplementation(async (value) => JSON.parse(JSON.stringify(value)))
 })
 
@@ -111,6 +116,16 @@ describe('MonitorSettingsPanel platform configuration', () => {
       expect.objectContaining({ value: 'deepseek' })
     )
     reloaded.unmount()
+  })
+
+  it('toggles the IQ detector switch through the API', async () => {
+    mocks.updateIQDetectorControl.mockResolvedValue({ enabled: true })
+    const wrapper = await panel()
+    await wrapper.find('[data-testid="iq-detector-toggle"]').trigger('click')
+    await flushPromises()
+    expect(mocks.updateIQDetectorControl).toHaveBeenCalledWith(true)
+    expect(mocks.showSuccess).toHaveBeenCalledOnce()
+    wrapper.unmount()
   })
 
   it('can start with no configured platforms and rejects duplicate additions', async () => {

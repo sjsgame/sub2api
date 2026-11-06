@@ -1,11 +1,17 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -24,6 +30,101 @@ type channelMonitorV2GroupAuthorizer interface {
 
 func NewChannelMonitorV2Handler(svc *service.ChannelMonitorV2Service, apiKeyService *service.APIKeyService) *ChannelMonitorV2Handler {
 	return &ChannelMonitorV2Handler{service: svc, apiKeyService: apiKeyService}
+}
+
+// 降智检测是宿主机上的独立服务，sub2api 只做管理端代理，避免把无鉴权的控制接口暴露给浏览器。
+const iqDetectorDefaultURL = "http://host.docker.internal:8090"
+
+type iqDetectorControl struct {
+	Enabled bool `json:"enabled"`
+	Running bool `json:"running"`
+}
+
+var iqDetectorHTTPClient = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		// host.docker.internal / 127.0.0.1 不走容器里的 HTTP_PROXY。
+		Proxy: nil,
+	},
+}
+
+func iqDetectorBaseURLs() []string {
+	if value := strings.TrimSpace(os.Getenv("IQ_DETECTOR_URL")); value != "" {
+		return []string{strings.TrimRight(value, "/")}
+	}
+	return []string{iqDetectorDefaultURL, "http://127.0.0.1:8090"}
+}
+
+func requestIQDetectorControl(ctx context.Context, method string, payload []byte) (*iqDetectorControl, error) {
+	var lastErr error
+	for _, baseURL := range iqDetectorBaseURLs() {
+		var body io.Reader
+		if payload != nil {
+			body = bytes.NewReader(payload)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, baseURL+"/api/control", body)
+		if err != nil {
+			return nil, err
+		}
+		if payload != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := iqDetectorHTTPClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+			lastErr = fmt.Errorf("返回 HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+			continue
+		}
+		var control iqDetectorControl
+		if err := json.Unmarshal(raw, &control); err != nil {
+			lastErr = err
+			continue
+		}
+		return &control, nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("检测服务不可达")
+	}
+	return nil, lastErr
+}
+
+func (h *ChannelMonitorV2Handler) GetIQDetectorControl(c *gin.Context) {
+	control, err := requestIQDetectorControl(c.Request.Context(), http.MethodGet, nil)
+	if err != nil {
+		response.Error(c, http.StatusBadGateway, "降智检测服务不可用: "+err.Error())
+		return
+	}
+	response.Success(c, control)
+}
+
+func (h *ChannelMonitorV2Handler) UpdateIQDetectorControl(c *gin.Context) {
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
+		response.BadRequest(c, "enabled is required")
+		return
+	}
+	payload, err := json.Marshal(map[string]bool{"enabled": *req.Enabled})
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	control, err := requestIQDetectorControl(c.Request.Context(), http.MethodPost, payload)
+	if err != nil {
+		response.Error(c, http.StatusBadGateway, "降智检测服务不可用: "+err.Error())
+		return
+	}
+	response.Success(c, control)
 }
 
 // channelMonitorV2IsAdmin is true when the request already passed admin auth

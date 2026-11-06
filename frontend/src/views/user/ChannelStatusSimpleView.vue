@@ -105,7 +105,7 @@
             <span>现在</span>
           </div>
 
-          <div v-if="iqTimelineAvailable(row)" class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700">
+          <div v-if="iqEnabled !== false && iqTimelineAvailable(row)" class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700">
             <div class="flex items-center justify-between text-xs">
               <span class="text-gray-500 dark:text-dark-400">渠道检测 · {{ rangeLabel }}</span>
             </div>
@@ -323,6 +323,18 @@ const IQ_API = window.location.hostname === '127.0.0.1' || window.location.hostn
   : 'https://iq.bbs2dpinyin.com'
 const IQ_STATUS: Record<string, string> = { pass: '通过', warn: '需关注', fail: '请求失败' }
 const iqTargets = ref<Record<string, IqTarget>>({})
+const iqEnabled = ref<boolean | null>(null)
+
+async function loadIqControl() {
+  try {
+    const res = await fetch(`${IQ_API}/api/control`)
+    if (!res.ok) return
+    const data = (await res.json()) as { enabled?: boolean }
+    if (typeof data.enabled === 'boolean') iqEnabled.value = data.enabled
+  } catch {
+    // 检测服务不可用时保持当前显示。
+  }
+}
 
 async function loadIq() {
   try {
@@ -640,6 +652,7 @@ async function load() {
       : ''
     // 检测时间轴复用渠道状态的窗口与桶大小，保证两条时间轴的格子数和边界一致。
     void loadIq()
+    void loadIqControl()
   } catch (error) {
     if ((error as { name?: string }).name !== 'CanceledError') {
       // 保持上次数据

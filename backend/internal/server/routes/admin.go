@@ -855,6 +855,8 @@ func registerChannelMonitorV2Routes(admin *gin.RouterGroup, h *handler.Handlers,
 		{
 			config.GET("/config", h.ChannelMonitorV2.GetConfig)
 			config.PUT("/config", h.ChannelMonitorV2.UpdateConfig)
+			config.GET("/iq-detector", h.ChannelMonitorV2.GetIQDetectorControl)
+			config.POST("/iq-detector", h.ChannelMonitorV2.UpdateIQDetectorControl)
 		}
 		reads := monitor.Group("")
 		reads.Use(modeV2Guard)
